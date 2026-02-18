@@ -2,6 +2,8 @@
 const statusEl = document.getElementById("status");
 const captureBtn = document.getElementById("captureBtn");
 const retakeBtn = document.getElementById("retakeBtn");
+const switchBtn = document.getElementById("switchBtn");
+const cameraSelect = document.getElementById("cameraSelect");
 const outputImg = document.getElementById("outputImg");
 const placeholder = document.getElementById("placeholder");
 const downloadLink = document.getElementById("downloadLink");
@@ -17,11 +19,13 @@ let cachedPosition = null;
 let cachedLocationLabel = null;
 let cachedLocationFetchedAt = 0;
 const LOCATION_CACHE_MS = 5 * 60 * 1000;
-const LOCATION_TARGET_ACCURACY_M = 40;
-const LOCATION_WATCH_TIMEOUT_MS = 20000;
 let hasCapture = false;
 let locationPromise = null;
 let locationLabelPromise = null;
+let currentFacingMode = "environment";
+let currentDeviceId = null;
+let latestDataUrl = null;
+let latestFileName = null;
 
 function setStatus(message) {
   statusEl.textContent = message;
@@ -35,6 +39,14 @@ function showConsent() {
 function hideConsent() {
   consentModal.classList.remove("show");
   consentModal.setAttribute("aria-hidden", "true");
+}
+
+function stopStream() {
+  if (!stream) {
+    return;
+  }
+  stream.getTracks().forEach((track) => track.stop());
+  stream = null;
 }
 
 function updateReadyStatus() {
@@ -64,21 +76,35 @@ async function initCamera({ silent = false } = {}) {
     if (!silent) {
       setStatus("Requesting camera access...");
     }
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" },
+    stopStream();
+    const constraints = {
+      video: currentDeviceId
+        ? { deviceId: { exact: currentDeviceId } }
+        : { facingMode: { ideal: currentFacingMode } },
       audio: false,
-    });
+    };
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = stream;
     await video.play();
+    const track = stream.getVideoTracks()[0];
+    currentDeviceId = track?.getSettings?.().deviceId || currentDeviceId;
     captureBtn.disabled = false;
-    retakeBtn.disabled = false;
+    retakeBtn.disabled = true;
+    retakeBtn.classList.add("hidden");
+    if (switchBtn) {
+      switchBtn.disabled = false;
+    }
+    if (cameraSelect) {
+      cameraSelect.disabled = false;
+    }
+    await updateCameraControls();
     updateReadyStatus();
   } catch (error) {
     setStatus("Camera access blocked.");
   }
 }
 
-function getLocationOnce() {
+function getLocation() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error("Geolocation not supported."));
@@ -89,56 +115,6 @@ function getLocationOnce() {
       timeout: 12000,
       maximumAge: 0,
     });
-  });
-}
-
-function getBestLocation() {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error("Geolocation not supported."));
-      return;
-    }
-
-    let bestPosition = null;
-    const settle = (position) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      navigator.geolocation.clearWatch(watchId);
-      if (position) {
-        resolve(position);
-      } else if (bestPosition) {
-        resolve(bestPosition);
-      } else {
-        reject(new Error("Unable to resolve location."));
-      }
-    };
-
-    const handleSuccess = (position) => {
-      if (!bestPosition || position.coords.accuracy < bestPosition.coords.accuracy) {
-        bestPosition = position;
-      }
-      if (position.coords.accuracy <= LOCATION_TARGET_ACCURACY_M) {
-        settle(position);
-      }
-    };
-
-    const handleError = () => {
-      settle(null);
-    };
-
-    let settled = false;
-    const watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
-      enableHighAccuracy: true,
-      timeout: LOCATION_WATCH_TIMEOUT_MS,
-      maximumAge: 0,
-    });
-
-    const timer = setTimeout(() => {
-      settle(null);
-    }, LOCATION_WATCH_TIMEOUT_MS);
   });
 }
 
@@ -154,12 +130,7 @@ async function ensureLocation() {
     return locationPromise;
   }
   locationPromise = (async () => {
-    let position = null;
-    try {
-      position = await getBestLocation();
-    } catch (error) {
-      position = await getLocationOnce();
-    }
+    const position = await getLocation();
     cachedPosition = position;
     cachedLocationFetchedAt = Date.now();
     return position;
@@ -338,7 +309,46 @@ function toggleOutput(hasOutput) {
   video.style.display = hasOutput ? "none" : "block";
 }
 
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function isAndroid() {
+  return /Android/.test(navigator.userAgent);
+}
+
+async function updateCameraControls() {
+  if (!cameraSelect || !switchBtn) {
+    return;
+  }
+  const isMobile = isIOS() || isAndroid();
+  switchBtn.style.display = isMobile ? "inline-flex" : "none";
+  cameraSelect.style.display = isMobile ? "none" : "inline-flex";
+
+  if (!isMobile) {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter((device) => device.kind === "videoinput");
+      cameraSelect.innerHTML = "";
+      videoDevices.forEach((device, index) => {
+        const option = document.createElement("option");
+        option.value = device.deviceId;
+        option.textContent = device.label || `Camera ${index + 1}`;
+        cameraSelect.appendChild(option);
+      });
+      if (currentDeviceId) {
+        cameraSelect.value = currentDeviceId;
+      }
+      cameraSelect.disabled = videoDevices.length < 2;
+    } catch (error) {
+      cameraSelect.disabled = true;
+    }
+  }
+}
+
 function enableDownload(dataUrl, fileName) {
+  latestDataUrl = dataUrl;
+  latestFileName = fileName;
   downloadLink.href = dataUrl;
   downloadLink.download = fileName;
   downloadLink.classList.remove("disabled");
@@ -362,6 +372,8 @@ async function capture() {
     outputImg.src = baseDataUrl;
     toggleOutput(true);
     hasCapture = true;
+    retakeBtn.disabled = false;
+    retakeBtn.classList.remove("hidden");
     setStatus("Tagging location...");
 
     const position = await ensureLocation();
@@ -398,6 +410,8 @@ function resetOutput() {
   outputImg.src = "";
   toggleOutput(false);
   hasCapture = false;
+  retakeBtn.disabled = true;
+  retakeBtn.classList.add("hidden");
   downloadLink.classList.add("disabled");
   downloadLink.removeAttribute("href");
   if (stream) {
@@ -423,14 +437,48 @@ consentDecline.addEventListener("click", () => {
 
 captureBtn.addEventListener("click", capture);
 retakeBtn.addEventListener("click", resetOutput);
-downloadLink.addEventListener("click", () => {
+if (switchBtn) {
+  switchBtn.addEventListener("click", () => {
+    currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
+    currentDeviceId = null;
+    setStatus("Switching camera...");
+    initCamera({ silent: true });
+  });
+}
+
+if (cameraSelect) {
+  cameraSelect.addEventListener("change", () => {
+    if (!cameraSelect.value) {
+      return;
+    }
+    currentDeviceId = cameraSelect.value;
+    setStatus("Switching camera...");
+    initCamera({ silent: true });
+  });
+}
+
+downloadLink.addEventListener("click", async (event) => {
   if (downloadLink.classList.contains("disabled")) {
     return;
   }
-  setStatus("Download started. Closing tab...");
-  setTimeout(() => {
-    window.close();
-  }, 500);
+  if ((isIOS() || isAndroid()) && latestDataUrl && latestFileName) {
+    event.preventDefault();
+    try {
+      const blob = await (await fetch(latestDataUrl)).blob();
+      const file = new File([blob], latestFileName, { type: "image/jpeg" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "Image Verification" });
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      return;
+    } catch (error) {
+      window.open(latestDataUrl, "_blank");
+      return;
+    }
+  }
+  setStatus("Download started.");
 });
 
 resetOutput();

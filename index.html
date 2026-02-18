@@ -20,12 +20,18 @@
   </header>
 
   <main class="layout">
-    <section class="panel">
-      <h2>Live Capture</h2>
+    <section class="panel live">
+      <h2 class="center-title">Live Capture</h2>
       <div class="video-wrap">
         <video id="video" autoplay playsinline></video>
         <img id="outputImg" alt="Captured output" />
         <div class="placeholder" id="placeholder">No capture yet.</div>
+        <div class="camera-overlay">
+          <button id="switchBtn" class="ghost" disabled>Switch Camera</button>
+          <select id="cameraSelect" class="ghost camera-select" disabled>
+            <option value="">Select Camera</option>
+          </select>
+        </div>
         <div class="status" id="status">Consent required to start.</div>
       </div>
       <div class="controls">

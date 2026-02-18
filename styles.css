@@ -121,6 +121,19 @@ h1 {
   backdrop-filter: blur(8px);
 }
 
+.panel.live {
+  align-items: center;
+  text-align: center;
+}
+
+.panel.live .controls {
+  justify-content: center;
+}
+
+.panel.live .note {
+  max-width: 520px;
+}
+
 .panel h2 {
   margin: 0;
   font-size: 1.4rem;
@@ -172,6 +185,31 @@ video {
   letter-spacing: 0.01em;
 }
 
+.camera-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  z-index: 2;
+}
+
+.camera-overlay .ghost,
+.camera-overlay .camera-select {
+  background: rgba(7, 10, 20, 0.72);
+  border: 1px solid rgba(215, 181, 109, 0.25);
+}
+
+.camera-overlay .ghost {
+  color: #f5f2ea;
+}
+
+.camera-overlay .camera-select {
+  min-width: 140px;
+  color: #f5f2ea;
+}
+
 .placeholder {
   color: rgba(245, 242, 234, 0.72);
   font-size: 0.95rem;
@@ -196,6 +234,16 @@ button,
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+select.ghost {
+  appearance: none;
+  background: transparent;
+  color: var(--ink);
+}
+
+.camera-select {
+  min-width: 180px;
 }
 
 button:disabled {
@@ -275,6 +323,10 @@ button:disabled {
 .primary.disabled {
   opacity: 0;
   pointer-events: none;
+}
+
+.hidden {
+  display: none !important;
 }
 
 @media (max-width: 720px) {
