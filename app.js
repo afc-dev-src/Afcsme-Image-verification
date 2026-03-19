@@ -9,22 +9,25 @@ const placeholder = document.getElementById("placeholder");
 const downloadLink = document.getElementById("downloadLink");
 const cameraOverlay = document.getElementById("cameraOverlay");
 const captureLogo = document.getElementById("captureLogo");
+const captureBadge = document.getElementById("captureBadge");
 
 const consentModal = document.getElementById("consentModal");
 const consentAccept = document.getElementById("consentAccept");
 const consentDecline = document.getElementById("consentDecline");
 
 const BRAND_LOGO_SRC = "logo.png";
+const CAPTURE_ASPECT_RATIO = 4 / 5;
+const CAPTURE_BADGE_TEXT = "AFC SME image verification";
 let stream = null;
 let consentGranted = false;
 let locationPermissionState = "unknown";
 let cachedPosition = null;
-let cachedLocationLabel = null;
+let cachedLocationDetails = null;
 let cachedLocationFetchedAt = 0;
 const LOCATION_CACHE_MS = 5 * 60 * 1000;
 let hasCapture = false;
 let locationPromise = null;
-let locationLabelPromise = null;
+let locationDetailsPromise = null;
 let currentFacingMode = "environment";
 let currentDeviceId = null;
 let latestDataUrl = null;
@@ -74,8 +77,9 @@ function updateReadyStatus() {
   if (hasCapture) {
     return;
   }
-  if (locationPermissionState === "granted" && cachedLocationLabel) {
-    setStatus(`Ready to capture. Location: ${cachedLocationLabel}.`);
+  const locationSummary = formatLocationSummary(cachedLocationDetails);
+  if (locationPermissionState === "granted" && locationSummary) {
+    setStatus(`Ready to capture. Location: ${locationSummary}.`);
     return;
   }
   if (locationPermissionState === "granted") {
@@ -158,15 +162,43 @@ async function ensureLocation() {
   }
 }
 
-function formatPlaceLabel(data) {
+function formatLocationSummary(details) {
+  if (!details) {
+    return null;
+  }
+  const segments = [details.city, details.province].filter(Boolean);
+  const countryAndZip = [details.countryCode, details.zipcode].filter(Boolean).join(" ");
+  if (countryAndZip) {
+    segments.push(countryAndZip);
+  }
+  return segments.join(", ") || null;
+}
+
+function formatPlaceDetails(data) {
   if (!data) {
     return null;
   }
-  const locality = data.locality || data.city || data.town || data.village || data.municipality;
-  const region = data.principalSubdivision || data.region || data.state || data.county;
-  const country = data.countryName || data.country;
+  const administrativeAreas = Array.isArray(data.localityInfo?.administrative) ? data.localityInfo.administrative : [];
+  const provinceEntry = administrativeAreas.find((entry) =>
+    String(entry.description || "").toLowerCase().includes("province")
+  );
+  const province =
+    provinceEntry?.name ||
+    data.county ||
+    data.state ||
+    data.province ||
+    (typeof data.principalSubdivision === "string" && !/region/i.test(data.principalSubdivision)
+      ? data.principalSubdivision
+      : null) ||
+    null;
 
-  return locality || region || country || null;
+  return {
+    city: data.locality || data.city || data.town || data.village || data.municipality || null,
+    province,
+    country: data.countryName || data.country || null,
+    countryCode: data.countryCode || data.isoAlpha2 || data.countryCodeIsoAlpha2 || null,
+    zipcode: data.postcode || data.postalCode || null,
+  };
 }
 
 async function reverseGeocode(latitude, longitude) {
@@ -177,28 +209,28 @@ async function reverseGeocode(latitude, longitude) {
       return null;
     }
     const data = await response.json();
-    return formatPlaceLabel(data);
+    return formatPlaceDetails(data);
   } catch (error) {
     return null;
   }
 }
 
-async function resolveLocationLabel(position) {
-  if (cachedLocationLabel && isLocationCacheFresh()) {
-    return cachedLocationLabel;
+async function resolveLocationDetails(position) {
+  if (cachedLocationDetails && isLocationCacheFresh()) {
+    return cachedLocationDetails;
   }
-  if (locationLabelPromise) {
-    return locationLabelPromise;
+  if (locationDetailsPromise) {
+    return locationDetailsPromise;
   }
-  locationLabelPromise = (async () => {
-    const label = await reverseGeocode(position.coords.latitude, position.coords.longitude);
-    cachedLocationLabel = label;
-    return label;
+  locationDetailsPromise = (async () => {
+    const details = await reverseGeocode(position.coords.latitude, position.coords.longitude);
+    cachedLocationDetails = details;
+    return details;
   })();
   try {
-    return await locationLabelPromise;
+    return await locationDetailsPromise;
   } finally {
-    locationLabelPromise = null;
+    locationDetailsPromise = null;
   }
 }
 
@@ -206,7 +238,7 @@ async function prefetchLocationPermission() {
   try {
     const position = await ensureLocation();
     locationPermissionState = "granted";
-    cachedLocationLabel = await resolveLocationLabel(position);
+    cachedLocationDetails = await resolveLocationDetails(position);
   } catch (error) {
     locationPermissionState = "denied";
   }
@@ -239,6 +271,28 @@ function toDmsRational(degrees) {
   return [[d, 1], [m, 1], toRational(secFloat)];
 }
 
+function getCenteredCrop(sourceWidth, sourceHeight, targetAspectRatio) {
+  const sourceAspectRatio = sourceWidth / sourceHeight;
+
+  if (sourceAspectRatio > targetAspectRatio) {
+    const cropWidth = sourceHeight * targetAspectRatio;
+    return {
+      sx: (sourceWidth - cropWidth) / 2,
+      sy: 0,
+      sw: cropWidth,
+      sh: sourceHeight,
+    };
+  }
+
+  const cropHeight = sourceWidth / targetAspectRatio;
+  return {
+    sx: 0,
+    sy: (sourceHeight - cropHeight) / 2,
+    sw: sourceWidth,
+    sh: cropHeight,
+  };
+}
+
 function loadImage(dataUrl) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -262,7 +316,7 @@ async function drawBrandLogo(ctx, canvas) {
   try {
     const logo = await loadBrandLogo();
     const padding = Math.max(18, canvas.width * 0.024);
-    const logoWidth = Math.min(canvas.width * 0.22, 188);
+    const logoWidth = Math.min(canvas.width * 0.16, 128);
     const logoHeight = logo.height * (logoWidth / logo.width);
 
     ctx.save();
@@ -275,7 +329,103 @@ async function drawBrandLogo(ctx, canvas) {
   }
 }
 
-async function renderTaggedImage(baseDataUrl, metadata, locationLabel) {
+function addRoundedRectPath(ctx, x, y, width, height, radius) {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + safeRadius, y);
+  ctx.lineTo(x + width - safeRadius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  ctx.lineTo(x + width, y + height - safeRadius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  ctx.lineTo(x + safeRadius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  ctx.lineTo(x, y + safeRadius);
+  ctx.quadraticCurveTo(x, y, x + safeRadius, y);
+  ctx.closePath();
+}
+
+function drawCaptureBadge(ctx, canvas) {
+  const text = CAPTURE_BADGE_TEXT.toUpperCase();
+  const badgeTop = Math.max(12, canvas.width * 0.018);
+  const badgePaddingX = Math.max(10, canvas.width * 0.014);
+  const badgePaddingY = Math.max(6, canvas.width * 0.008);
+  const badgeRadius = Math.max(10, canvas.width * 0.018);
+  const maxBadgeWidth = canvas.width - Math.max(88, canvas.width * 0.18);
+  let fontSize = Math.max(10, Math.min(14, canvas.width * 0.012));
+
+  ctx.save();
+  ctx.font = `600 ${fontSize}px "IBM Plex Mono", "Consolas", monospace`;
+
+  while (ctx.measureText(text).width + badgePaddingX * 2 > maxBadgeWidth && fontSize > 8) {
+    fontSize -= 1;
+    ctx.font = `600 ${fontSize}px "IBM Plex Mono", "Consolas", monospace`;
+  }
+
+  const badgeWidth = Math.min(maxBadgeWidth, ctx.measureText(text).width + badgePaddingX * 2);
+  const badgeHeight = fontSize + badgePaddingY * 2;
+  const badgeX = (canvas.width - badgeWidth) / 2;
+
+  ctx.shadowColor = "rgba(6, 10, 20, 0.24)";
+  ctx.shadowBlur = Math.max(10, canvas.width * 0.012);
+  ctx.fillStyle = "rgba(7, 10, 20, 0.72)";
+  addRoundedRectPath(ctx, badgeX, badgeTop, badgeWidth, badgeHeight, badgeRadius);
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(215, 181, 109, 0.22)";
+  ctx.lineWidth = Math.max(1, canvas.width * 0.0016);
+  addRoundedRectPath(ctx, badgeX, badgeTop, badgeWidth, badgeHeight, badgeRadius);
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(245, 242, 234, 0.92)";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, canvas.width / 2, badgeTop + badgeHeight / 2 + fontSize * 0.03);
+  ctx.restore();
+}
+
+function wrapCanvasText(ctx, text, maxWidth) {
+  const content = String(text || "").trim();
+  if (!content) {
+    return ["Unavailable"];
+  }
+
+  const words = content.split(/\s+/);
+  const lines = [];
+  let currentLine = "";
+
+  words.forEach((word) => {
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (!currentLine || ctx.measureText(candidate).width <= maxWidth) {
+      currentLine = candidate;
+      return;
+    }
+    lines.push(currentLine);
+    currentLine = word;
+  });
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines.length ? lines : ["Unavailable"];
+}
+
+function formatTaggedLocation(details) {
+  if (!details) {
+    return null;
+  }
+
+  const segments = [details.city, details.province].filter(Boolean);
+  const countryAndZip = [details.countryCode, details.zipcode].filter(Boolean).join(" ");
+  if (countryAndZip) {
+    segments.push(countryAndZip);
+  }
+
+  return segments.join(", ") || null;
+}
+
+async function renderTaggedImage(baseDataUrl, metadata, locationDetails) {
   const img = await loadImage(baseDataUrl);
   const canvas = document.createElement("canvas");
   canvas.width = img.width;
@@ -284,30 +434,44 @@ async function renderTaggedImage(baseDataUrl, metadata, locationLabel) {
   const ctx = canvas.getContext("2d");
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   await drawBrandLogo(ctx, canvas);
+  drawCaptureBadge(ctx, canvas);
 
   const padding = Math.max(18, canvas.width * 0.02);
   const fontSize = Math.max(18, canvas.width * 0.028);
   const lineHeight = fontSize * 1.3;
-  const lines = [];
-  lines.push(`Captured: ${formatTimestamp(metadata.timestamp)}`);
-  if (locationLabel) {
-    lines.push(`Location: ${locationLabel}`);
+  const maxTextWidth = canvas.width - padding * 2;
+  ctx.font = `${fontSize}px "Space Grotesk", "Segoe UI", sans-serif`;
+  const lines = [`Captured: ${formatTimestamp(metadata.timestamp)}`];
+  const taggedLocation = formatTaggedLocation(locationDetails);
+
+  if (taggedLocation) {
+    lines.push(...wrapCanvasText(ctx, `Location: ${taggedLocation}`, maxTextWidth));
   }
-  lines.push(`Lat: ${metadata.latitude.toFixed(6)}  Lon: ${metadata.longitude.toFixed(6)} (±${Math.round(metadata.accuracy)}m)`);
+
+  lines.push(
+    ...wrapCanvasText(
+      ctx,
+      `Lat: ${metadata.latitude.toFixed(6)}  Lon: ${metadata.longitude.toFixed(6)} (±${Math.round(metadata.accuracy)}m)`,
+      maxTextWidth
+    )
+  );
+
   const boxHeight = lineHeight * lines.length + padding * 1.2;
 
   ctx.fillStyle = "rgba(12, 9, 6, 0.6)";
   ctx.fillRect(0, canvas.height - boxHeight, canvas.width, boxHeight);
 
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `${fontSize}px "Space Grotesk", "Segoe UI", sans-serif`;
-  ctx.textBaseline = "bottom";
+  ctx.fillStyle = "rgba(245, 242, 234, 0.9)";
+  ctx.textBaseline = "top";
+  ctx.shadowColor = "rgba(4, 8, 16, 0.22)";
+  ctx.shadowBlur = Math.max(1.5, canvas.width * 0.0018);
 
-  let currentY = canvas.height - padding - lineHeight * (lines.length - 1);
+  let currentY = canvas.height - boxHeight + padding * 0.55;
   lines.forEach((text) => {
     ctx.fillText(text, padding, currentY);
     currentY += lineHeight;
   });
+  ctx.shadowBlur = 0;
 
   const stampedDataUrl = canvas.toDataURL("image/jpeg", 0.92);
   return embedExif(stampedDataUrl, metadata);
@@ -356,6 +520,9 @@ function toggleOutput(hasOutput) {
   }
   if (captureLogo) {
     captureLogo.classList.toggle("hidden", hasOutput);
+  }
+  if (captureBadge) {
+    captureBadge.classList.toggle("hidden", !hasOutput);
   }
 }
 
@@ -410,13 +577,24 @@ async function capture() {
 
   try {
     const timestamp = new Date();
-    const width = video.videoWidth || 1280;
-    const height = video.videoHeight || 720;
+    const sourceWidth = video.videoWidth || 1280;
+    const sourceHeight = video.videoHeight || 720;
+    const crop = getCenteredCrop(sourceWidth, sourceHeight, CAPTURE_ASPECT_RATIO);
     const baseCanvas = document.createElement("canvas");
-    baseCanvas.width = width;
-    baseCanvas.height = height;
+    baseCanvas.width = Math.round(crop.sw);
+    baseCanvas.height = Math.round(crop.sh);
     const baseCtx = baseCanvas.getContext("2d");
-    baseCtx.drawImage(video, 0, 0, width, height);
+    baseCtx.drawImage(
+      video,
+      crop.sx,
+      crop.sy,
+      crop.sw,
+      crop.sh,
+      0,
+      0,
+      baseCanvas.width,
+      baseCanvas.height
+    );
     const baseDataUrl = baseCanvas.toDataURL("image/jpeg", 0.92);
 
     outputImg.src = baseDataUrl;
@@ -427,7 +605,7 @@ async function capture() {
 
     const position = await ensureLocation();
     const { latitude, longitude, altitude, accuracy } = position.coords;
-    const locationLabel = await resolveLocationLabel(position);
+    const locationDetails = await resolveLocationDetails(position);
 
     const taggedDataUrl = await renderTaggedImage(
       baseDataUrl,
@@ -438,7 +616,7 @@ async function capture() {
         accuracy,
         timestamp,
       },
-      locationLabel
+      locationDetails
     );
 
     outputImg.src = taggedDataUrl;
