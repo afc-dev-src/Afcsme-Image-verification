@@ -175,14 +175,42 @@ video {
 }
 
 .capture-logo {
+  --overlay-top: 14px;
+  --badge-height: 30px;
+  --logo-size: clamp(42px, 11%, 60px);
   position: absolute;
-  top: 12px;
+  top: calc(var(--overlay-top) + (var(--badge-height) - var(--logo-size)) / 2);
   left: 12px;
-  width: clamp(52px, 13%, 84px);
+  width: var(--logo-size);
   height: auto;
   z-index: 2;
   pointer-events: none;
   filter: drop-shadow(0 10px 24px rgba(6, 10, 20, 0.38));
+}
+
+.capture-badge {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+  min-height: 30px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: rgba(7, 10, 20, 0.72);
+  border: 1px solid rgba(215, 181, 109, 0.22);
+  color: rgba(245, 242, 234, 0.92);
+  font-family: "IBM Plex Mono", "Consolas", monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 24px rgba(6, 10, 20, 0.24);
 }
 
 .status {
@@ -350,5 +378,21 @@ button:disabled {
   }
   .header {
     padding: 28px 6vw 6px;
+  }
+  .capture-logo {
+    --overlay-top: 12px;
+    --badge-height: 26px;
+    --logo-size: clamp(38px, 10%, 52px);
+    left: 10px;
+  }
+  .capture-badge {
+    top: 12px;
+    min-height: 26px;
+    padding: 5px 12px;
+    font-size: 0.56rem;
+    letter-spacing: 0.08em;
+    max-width: calc(100% - 92px);
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }

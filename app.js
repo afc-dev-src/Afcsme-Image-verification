@@ -9,6 +9,7 @@ const placeholder = document.getElementById("placeholder");
 const downloadLink = document.getElementById("downloadLink");
 const cameraOverlay = document.getElementById("cameraOverlay");
 const captureLogo = document.getElementById("captureLogo");
+const captureBadge = document.getElementById("captureBadge");
 
 const consentModal = document.getElementById("consentModal");
 const consentAccept = document.getElementById("consentAccept");
@@ -314,14 +315,17 @@ function loadBrandLogo() {
 async function drawBrandLogo(ctx, canvas) {
   try {
     const logo = await loadBrandLogo();
-    const padding = Math.max(18, canvas.width * 0.024);
-    const logoWidth = Math.min(canvas.width * 0.16, 128);
+    const badgeTop = Math.max(14, canvas.width * 0.018);
+    const badgeHeight = Math.max(28, Math.min(38, canvas.width * 0.03));
+    const logoLeft = Math.max(12, canvas.width * 0.018);
+    const logoWidth = Math.min(canvas.width * 0.115, 84);
     const logoHeight = logo.height * (logoWidth / logo.width);
+    const logoY = badgeTop + badgeHeight / 2 - logoHeight / 2;
 
     ctx.save();
     ctx.shadowColor = "rgba(4, 8, 16, 0.32)";
     ctx.shadowBlur = Math.max(12, canvas.width * 0.012);
-    ctx.drawImage(logo, padding, padding, logoWidth, logoHeight);
+    ctx.drawImage(logo, logoLeft, logoY, logoWidth, logoHeight);
     ctx.restore();
   } catch (error) {
     // Continue without branding if the local asset is unavailable.
@@ -345,12 +349,12 @@ function addRoundedRectPath(ctx, x, y, width, height, radius) {
 
 function drawCaptureBadge(ctx, canvas) {
   const text = CAPTURE_BADGE_TEXT.toUpperCase();
-  const badgeTop = Math.max(12, canvas.width * 0.018);
-  const badgePaddingX = Math.max(14, canvas.width * 0.018);
-  const badgePaddingY = Math.max(8, canvas.width * 0.01);
+  const badgeTop = Math.max(14, canvas.width * 0.018);
+  const badgePaddingX = Math.max(16, canvas.width * 0.02);
+  const badgePaddingY = Math.max(7, canvas.width * 0.009);
   const badgeRadius = Math.max(12, canvas.width * 0.02);
-  const maxBadgeWidth = canvas.width - Math.max(72, canvas.width * 0.14);
-  let fontSize = Math.max(12, Math.min(18, canvas.width * 0.015));
+  const maxBadgeWidth = canvas.width - Math.max(96, canvas.width * 0.19);
+  let fontSize = Math.max(11, Math.min(16, canvas.width * 0.014));
 
   ctx.save();
   ctx.font = `600 ${fontSize}px "IBM Plex Mono", "Consolas", monospace`;
@@ -519,6 +523,9 @@ function toggleOutput(hasOutput) {
   }
   if (captureLogo) {
     captureLogo.classList.toggle("hidden", hasOutput);
+  }
+  if (captureBadge) {
+    captureBadge.classList.toggle("hidden", hasOutput);
   }
 }
 
