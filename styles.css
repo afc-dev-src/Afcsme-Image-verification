@@ -185,35 +185,19 @@ video {
   filter: drop-shadow(0 10px 24px rgba(6, 10, 20, 0.38));
 }
 
-.capture-badge {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 2;
-  pointer-events: none;
-  padding: 7px 14px;
-  border-radius: 999px;
-  background: rgba(7, 10, 20, 0.72);
-  border: 1px solid rgba(215, 181, 109, 0.22);
-  color: rgba(245, 242, 234, 0.92);
-  font-family: "IBM Plex Mono", "Consolas", monospace;
-  font-size: 0.66rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  box-shadow: 0 10px 24px rgba(6, 10, 20, 0.24);
-}
-
 .status {
-  position: absolute;
-  inset: auto 14px 14px 14px;
+  position: static;
   background: rgba(7, 10, 20, 0.75);
   color: #fff;
   padding: 8px 12px;
   border-radius: 999px;
   font-size: 0.85rem;
   letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 520px);
+  margin: 4px auto 0;
 }
 
 .camera-overlay {
@@ -366,14 +350,5 @@ button:disabled {
   }
   .header {
     padding: 28px 6vw 6px;
-  }
-  .capture-badge {
-    top: 10px;
-    padding: 6px 10px;
-    font-size: 0.55rem;
-    letter-spacing: 0.08em;
-    max-width: calc(100% - 120px);
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 }

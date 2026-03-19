@@ -9,7 +9,6 @@ const placeholder = document.getElementById("placeholder");
 const downloadLink = document.getElementById("downloadLink");
 const cameraOverlay = document.getElementById("cameraOverlay");
 const captureLogo = document.getElementById("captureLogo");
-const captureBadge = document.getElementById("captureBadge");
 
 const consentModal = document.getElementById("consentModal");
 const consentAccept = document.getElementById("consentAccept");
@@ -347,11 +346,11 @@ function addRoundedRectPath(ctx, x, y, width, height, radius) {
 function drawCaptureBadge(ctx, canvas) {
   const text = CAPTURE_BADGE_TEXT.toUpperCase();
   const badgeTop = Math.max(12, canvas.width * 0.018);
-  const badgePaddingX = Math.max(10, canvas.width * 0.014);
-  const badgePaddingY = Math.max(6, canvas.width * 0.008);
-  const badgeRadius = Math.max(10, canvas.width * 0.018);
-  const maxBadgeWidth = canvas.width - Math.max(88, canvas.width * 0.18);
-  let fontSize = Math.max(10, Math.min(14, canvas.width * 0.012));
+  const badgePaddingX = Math.max(14, canvas.width * 0.018);
+  const badgePaddingY = Math.max(8, canvas.width * 0.01);
+  const badgeRadius = Math.max(12, canvas.width * 0.02);
+  const maxBadgeWidth = canvas.width - Math.max(72, canvas.width * 0.14);
+  let fontSize = Math.max(12, Math.min(18, canvas.width * 0.015));
 
   ctx.save();
   ctx.font = `600 ${fontSize}px "IBM Plex Mono", "Consolas", monospace`;
@@ -520,9 +519,6 @@ function toggleOutput(hasOutput) {
   }
   if (captureLogo) {
     captureLogo.classList.toggle("hidden", hasOutput);
-  }
-  if (captureBadge) {
-    captureBadge.classList.toggle("hidden", !hasOutput);
   }
 }
 
