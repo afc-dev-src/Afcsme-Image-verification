@@ -25,8 +25,9 @@
       <div class="video-wrap">
         <video id="video" autoplay playsinline></video>
         <img id="outputImg" alt="Captured output" />
+        <img id="captureLogo" class="capture-logo" src="logo.png" alt="" aria-hidden="true" />
         <div class="placeholder" id="placeholder">No capture yet.</div>
-        <div class="camera-overlay">
+        <div class="camera-overlay" id="cameraOverlay">
           <button id="switchBtn" class="ghost" disabled>Switch Camera</button>
           <select id="cameraSelect" class="ghost camera-select" disabled>
             <option value="">Select Camera</option>
@@ -36,8 +37,8 @@
       </div>
       <div class="controls">
         <button id="captureBtn" class="ghost" disabled>Capture</button>
-        <button id="retakeBtn" class="ghost" disabled>Retake</button>
-        <a id="downloadLink" class="primary disabled" download>Download Image</a>
+        <button id="retakeBtn" class="ghost hidden" disabled>Retake</button>
+        <a id="downloadLink" class="primary disabled hidden" download>Download Image</a>
       </div>
       <p class="note" id="metaNote">Check the image if your face is visible and properly aligned.</p>
     </section>

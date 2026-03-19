@@ -7,11 +7,14 @@ const cameraSelect = document.getElementById("cameraSelect");
 const outputImg = document.getElementById("outputImg");
 const placeholder = document.getElementById("placeholder");
 const downloadLink = document.getElementById("downloadLink");
+const cameraOverlay = document.getElementById("cameraOverlay");
+const captureLogo = document.getElementById("captureLogo");
 
 const consentModal = document.getElementById("consentModal");
 const consentAccept = document.getElementById("consentAccept");
 const consentDecline = document.getElementById("consentDecline");
 
+const BRAND_LOGO_SRC = "logo.png";
 let stream = null;
 let consentGranted = false;
 let locationPermissionState = "unknown";
@@ -26,9 +29,24 @@ let currentFacingMode = "environment";
 let currentDeviceId = null;
 let latestDataUrl = null;
 let latestFileName = null;
+let logoImagePromise = null;
 
 function setStatus(message) {
   statusEl.textContent = message;
+}
+
+function syncActionButtons() {
+  const canCapture = Boolean(stream) && !hasCapture;
+  const canDownload = Boolean(latestDataUrl);
+
+  captureBtn.classList.toggle("hidden", hasCapture);
+  captureBtn.disabled = !canCapture;
+
+  retakeBtn.classList.toggle("hidden", !hasCapture);
+  retakeBtn.disabled = !hasCapture;
+
+  downloadLink.classList.toggle("hidden", !canDownload);
+  downloadLink.classList.toggle("disabled", !canDownload);
 }
 
 function showConsent() {
@@ -88,15 +106,13 @@ async function initCamera({ silent = false } = {}) {
     await video.play();
     const track = stream.getVideoTracks()[0];
     currentDeviceId = track?.getSettings?.().deviceId || currentDeviceId;
-    captureBtn.disabled = false;
-    retakeBtn.disabled = true;
-    retakeBtn.classList.add("hidden");
     if (switchBtn) {
       switchBtn.disabled = false;
     }
     if (cameraSelect) {
       cameraSelect.disabled = false;
     }
+    syncActionButtons();
     await updateCameraControls();
     updateReadyStatus();
   } catch (error) {
@@ -232,6 +248,33 @@ function loadImage(dataUrl) {
   });
 }
 
+function loadBrandLogo() {
+  if (!logoImagePromise) {
+    logoImagePromise = loadImage(BRAND_LOGO_SRC).catch((error) => {
+      logoImagePromise = null;
+      throw error;
+    });
+  }
+  return logoImagePromise;
+}
+
+async function drawBrandLogo(ctx, canvas) {
+  try {
+    const logo = await loadBrandLogo();
+    const padding = Math.max(18, canvas.width * 0.024);
+    const logoWidth = Math.min(canvas.width * 0.22, 188);
+    const logoHeight = logo.height * (logoWidth / logo.width);
+
+    ctx.save();
+    ctx.shadowColor = "rgba(4, 8, 16, 0.32)";
+    ctx.shadowBlur = Math.max(12, canvas.width * 0.012);
+    ctx.drawImage(logo, padding, padding, logoWidth, logoHeight);
+    ctx.restore();
+  } catch (error) {
+    // Continue without branding if the local asset is unavailable.
+  }
+}
+
 async function renderTaggedImage(baseDataUrl, metadata, locationLabel) {
   const img = await loadImage(baseDataUrl);
   const canvas = document.createElement("canvas");
@@ -240,6 +283,7 @@ async function renderTaggedImage(baseDataUrl, metadata, locationLabel) {
 
   const ctx = canvas.getContext("2d");
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  await drawBrandLogo(ctx, canvas);
 
   const padding = Math.max(18, canvas.width * 0.02);
   const fontSize = Math.max(18, canvas.width * 0.028);
@@ -307,6 +351,12 @@ function toggleOutput(hasOutput) {
   placeholder.style.display = hasOutput ? "none" : "block";
   outputImg.style.display = hasOutput ? "block" : "none";
   video.style.display = hasOutput ? "none" : "block";
+  if (cameraOverlay) {
+    cameraOverlay.classList.toggle("hidden", hasOutput);
+  }
+  if (captureLogo) {
+    captureLogo.classList.toggle("hidden", hasOutput);
+  }
 }
 
 function isIOS() {
@@ -351,7 +401,7 @@ function enableDownload(dataUrl, fileName) {
   latestFileName = fileName;
   downloadLink.href = dataUrl;
   downloadLink.download = fileName;
-  downloadLink.classList.remove("disabled");
+  syncActionButtons();
 }
 
 async function capture() {
@@ -372,8 +422,7 @@ async function capture() {
     outputImg.src = baseDataUrl;
     toggleOutput(true);
     hasCapture = true;
-    retakeBtn.disabled = false;
-    retakeBtn.classList.remove("hidden");
+    syncActionButtons();
     setStatus("Tagging location...");
 
     const position = await ensureLocation();
@@ -400,9 +449,12 @@ async function capture() {
 
     setStatus("Captured. Output tagged.");
   } catch (error) {
-    setStatus("Location access required for tagging.");
+    latestDataUrl = null;
+    latestFileName = null;
+    syncActionButtons();
+    setStatus("Location access required for tagging. Retake or allow location and try again.");
   } finally {
-    captureBtn.disabled = false;
+    syncActionButtons();
   }
 }
 
@@ -410,10 +462,11 @@ function resetOutput() {
   outputImg.src = "";
   toggleOutput(false);
   hasCapture = false;
-  retakeBtn.disabled = true;
-  retakeBtn.classList.add("hidden");
-  downloadLink.classList.add("disabled");
+  latestDataUrl = null;
+  latestFileName = null;
   downloadLink.removeAttribute("href");
+  downloadLink.removeAttribute("download");
+  syncActionButtons();
   if (stream) {
     updateReadyStatus();
   } else {
